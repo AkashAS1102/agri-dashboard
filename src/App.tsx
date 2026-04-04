@@ -326,7 +326,7 @@ function Dashboard({ userEmail, onLogout }: { userEmail: string | null; onLogout
   const [lang, setLang] = useState<Lang>("en");
   const t = (key: string) => translations[lang][key] ?? key;
 
-  const [weather] = useState({ temp: 31, humidity: 72, wind: 18 });
+  const [weather, setWeather] = useState({ temp: 31, humidity: 72, wind: 18 });
 
   // Disease Scanner
   const [scanPreview, setScanPreview] = useState<string | null>(null);
@@ -341,6 +341,44 @@ function Dashboard({ userEmail, onLogout }: { userEmail: string | null; onLogout
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ crop: string; confidence: number; isFallback: boolean } | null>(null);
   const [historyLog, setHistoryLog] = useState<{ location: string; crop: string; time: string }[]>([]);
+
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          
+          // Fetch Weather
+          try {
+            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`);
+            const data = await res.json();
+            if (data.current) {
+              setWeather({
+                temp: Math.round(data.current.temperature_2m),
+                humidity: Math.round(data.current.relative_humidity_2m),
+                wind: Math.round(data.current.wind_speed_10m)
+              });
+            }
+          } catch (err) {
+            console.error("Failed to fetch weather", err);
+          }
+
+          // Fetch Location Name
+          try {
+            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+            const geoData = await geoRes.json();
+            const locName = geoData.address.city || geoData.address.town || geoData.address.village || geoData.address.county || geoData.address.state || "Auto-detected Location";
+            setForm((prev) => ({ ...prev, location: locName }));
+          } catch (err) {
+            console.error("Geocoding failed", err);
+          }
+        },
+        (error) => {
+          console.error("Geolocation error:", error);
+        }
+      );
+    }
+  }, []);
 
   // ── Disease scanner handlers ──────────────────────────────────────────────
   const handleFileDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
